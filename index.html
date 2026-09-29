@@ -4,6 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Epidemic Sound Fast Downloader</title>
+    <script src="env.js"></script>
     <style>
         * { box-sizing: border-box; margin: 0; padding: 0; }
         body {
@@ -14,42 +15,25 @@
             display: flex;
             justify-content: center;
             align-items: flex-start;
-            padding: 30px 16px;
+            padding: 40px 16px;
         }
         .container {
             background: #18181d;
             border: 2px solid #2a2a35;
-            padding: 32px;
+            padding: 36px;
             border-radius: 20px;
             width: 100%;
             max-width: 680px;
             box-shadow: 0 15px 40px rgba(0,0,0,0.6);
         }
         h1 {
-            font-size: 34px;
+            font-size: 36px;
             font-weight: 900;
             text-align: center;
-            margin-bottom: 20px;
+            margin-bottom: 24px;
             letter-spacing: 1px;
             color: #00e676;
         }
-        .api-box {
-            display: flex;
-            gap: 10px;
-            margin-bottom: 18px;
-        }
-        .api-box input {
-            flex: 1;
-            padding: 14px 16px;
-            font-size: 16px;
-            font-weight: 800;
-            border-radius: 12px;
-            border: 2px solid #333;
-            background: #22222a;
-            color: #fff;
-            outline: none;
-        }
-        .api-box input:focus, .main-input:focus { border-color: #00e676; }
         .main-input {
             width: 100%;
             padding: 22px;
@@ -62,6 +46,7 @@
             margin-bottom: 18px;
             outline: none;
         }
+        .main-input:focus { border-color: #00e676; }
         .btn-group {
             display: grid;
             grid-template-columns: 1fr;
@@ -88,10 +73,10 @@
             font-size: 20px;
             font-weight: 900;
             text-align: center;
-            padding: 14px;
+            padding: 16px;
             border-radius: 12px;
             background: #22222a;
-            color: #aaa;
+            color: #00e676;
         }
         .results {
             margin-top: 20px;
@@ -119,7 +104,6 @@
             background: #00e676;
             color: #000;
             border-radius: 10px;
-            text-decoration: none;
             white-space: nowrap;
         }
     </style>
@@ -129,14 +113,10 @@
 <div class="container">
     <h1>⚡ EPIDEMIC FAST DL</h1>
 
-    <div class="api-box">
-        <input type="password" id="apiKey" placeholder="Paste Epidemic Sound Bearer API Key..." oninput="saveKey()">
-    </div>
-
     <input type="text" id="queryInput" class="main-input" placeholder="Paste Link / Track ID / Search..." autofocus>
 
     <div class="btn-group">
-        <button class="btn-track" onclick="handleAction('track')">⬇ DOWNLOAD TRACK (320kbps)</button>
+        <button class="btn-track" onclick="handleAction('track')">⬇ DOWNLOAD TRACK (320KBPS)</button>
         <button class="btn-stems" onclick="handleAction('stems')">🎛 DOWNLOAD STEMS / WAV</button>
         <button class="btn-sfx" onclick="handleAction('sfx')">🔊 DOWNLOAD SFX</button>
     </div>
@@ -147,29 +127,22 @@
 
 <script>
     const API_BASE = 'https://partner-content-api.epidemicsound.com/v0';
-    const keyInput = document.getElementById('apiKey');
+    let API_KEY = window.EPIDEMIC_API_KEY || '';
+
     const queryInput = document.getElementById('queryInput');
     const statusEl = document.getElementById('status');
     const resultsEl = document.getElementById('results');
 
-    keyInput.value = localStorage.getItem('es_api_key') || '';
-    function saveKey() { localStorage.setItem('es_api_key', keyInput.value.trim()); }
-
-    // Otomatis baca API Key dari file .env jika tersedia
-    fetch('.env')
-        .then(r => r.ok ? r.text() : '')
-        .then(text => {
-            const match = text.match(/^\s*EPIDEMIC_API_KEY\s*=\s*(.+)\s*$/m);
-            if (match && match[1]) {
-                const envKey = match[1].trim().replace(/^['"]|['"]$/g, '');
-                if (envKey && envKey !== 'masukkan_api_key_disini') {
-                    keyInput.value = envKey;
-                    saveKey();
-                    setStatus('🔑 API Key otomatis dimuat dari .env', '#00e676');
-                }
-            }
-        })
-        .catch(() => {});
+    // Fallback baca dari .env jika dijalankan lewat HTTP server
+    if (!API_KEY) {
+        fetch('.env')
+            .then(r => r.ok ? r.text() : '')
+            .then(text => {
+                const match = text.match(/^\s*EPIDEMIC_API_KEY\s*=\s*(.+)\s*$/m);
+                if (match && match[1]) API_KEY = match[1].trim().replace(/^['"]|['"]$/g, '');
+            })
+            .catch(() => {});
+    }
 
     queryInput.addEventListener('keydown', e => {
         if (e.key === 'Enter') handleAction('track');
@@ -179,7 +152,8 @@
         const uuidMatch = input.match(/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i);
         if (uuidMatch) return uuidMatch[0];
         if (input.includes('epidemicsound.com/')) {
-            const parts = input.split('/').filter(Boolean);
+            const cleanUrl = input.split('?')[0];
+            const parts = cleanUrl.split('/').filter(Boolean);
             return parts[parts.length - 1].replace(/-/g, ' ');
         }
         return null;
@@ -191,14 +165,13 @@
     }
 
     async function apiFetch(path, options = {}) {
-        const key = keyInput.value.trim();
-        if (!key) throw new Error('Masukkan API Key Epidemic Sound dulu!');
+        if (!API_KEY) throw new Error('API Key belum terpasang di .env / env.js!');
         const res = await fetch(`${API_BASE}${path}`, {
             ...options,
             headers: {
                 'Accept': 'application/json',
                 'Content-Type': 'application/json',
-                'Authorization': `Bearer ${key}`,
+                'Authorization': `Bearer ${API_KEY}`,
                 ...(options.headers || {})
             }
         });
@@ -209,45 +182,63 @@
         return res.json();
     }
 
-    function triggerDownload(url) {
-        const a = document.createElement('a');
-        a.href = url;
-        a.target = '_blank';
-        a.download = '';
-        document.body.appendChild(a);
-        a.click();
-        a.remove();
+    async function forceDownloadFile(url, filename) {
+        try {
+            setStatus(`⬇️ Mengunduh file "${filename}"...`, '#ffea00');
+            const res = await fetch(url);
+            const blob = await res.blob();
+            const blobUrl = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = blobUrl;
+            a.download = filename;
+            document.body.appendChild(a);
+            a.click();
+            a.remove();
+            setTimeout(() => URL.revokeObjectURL(blobUrl), 5000);
+        } catch (_) {
+            window.open(url, '_blank');
+        }
     }
 
-    async function downloadDirect(id, type, title = 'Audio') {
+    async function downloadDirect(id, type, title = '') {
         try {
-            setStatus(`⏳ Mengambil link download ${title}...`, '#ffea00');
+            let finalTitle = title || id;
+            if (!title && type !== 'sfx') {
+                const meta = await apiFetch(`/tracks/metadata?trackId=${id}`).catch(() => []);
+                if (meta && meta[0]) {
+                    const artist = meta[0].mainArtists?.join(', ') || '';
+                    finalTitle = artist ? `${meta[0].title} - ${artist}` : meta[0].title;
+                }
+            }
+            const cleanName = finalTitle.replace(/[\\/:*?"<>|]/g, '_');
+
+            setStatus(`⏳ Mengambil link download "${finalTitle}"...`, '#ffea00');
+
             if (type === 'sfx') {
                 const data = await apiFetch(`/sound-effects/${id}/download?format=mp3&quality=high`);
-                triggerDownload(data.url);
-                setStatus(`✅ SFX "${title}" Berhasil Didownload!`, '#00e676');
+                await forceDownloadFile(data.url, `${cleanName} [SFX].mp3`);
+                setStatus(`✅ SFX "${finalTitle}" Berhasil Didownload!`, '#00e676');
             } else if (type === 'stems') {
-                // Request high-quality WAV / Stem version job or instrumental download
                 try {
                     const job = await apiFetch(`/tracks/versions`, {
                         method: 'POST',
                         body: JSON.stringify({ trackId: id, durationMs: 120000 })
                     });
                     if (job.jobId) {
-                        setStatus(`🎛 Memproses WAV/Stems (Job ${job.jobId.slice(0,8)})...`, '#2979ff');
-                        await pollVersionJob(job.jobId, title);
+                        setStatus(`🎛 Memproses WAV/Stems "${finalTitle}"...`, '#2979ff');
+                        await pollVersionJob(job.jobId, cleanName);
+                        queryInput.value = '';
+                        queryInput.focus();
                         return;
                     }
-                } catch (_) {
-                    // Fallback ke direct high quality download
-                }
+                } catch (_) {}
                 const data = await apiFetch(`/tracks/${id}/download?format=mp3&quality=high`);
-                triggerDownload(data.url);
-                setStatus(`✅ Stems/Audio "${title}" Berhasil Didownload!`, '#00e676');
+                await forceDownloadFile(data.url, `${cleanName} [STEMS].mp3`);
+                setStatus(`✅ Stems/Audio "${finalTitle}" Berhasil Didownload!`, '#00e676');
             } else {
                 const data = await apiFetch(`/tracks/${id}/download?format=mp3&quality=high`);
-                triggerDownload(data.url);
-                setStatus(`✅ Track "${title}" Berhasil Didownload!`, '#00e676');
+                await forceDownloadFile(data.url, `${cleanName}.mp3`);
+                setStatus(`✅ Track "${finalTitle}" Berhasil Didownload!`, '#00e676');
             }
             queryInput.value = '';
             queryInput.focus();
@@ -256,13 +247,15 @@
         }
     }
 
-    async function pollVersionJob(jobId, title) {
-        for (let i = 0; i < 20; i++) {
+    async function pollVersionJob(jobId, cleanName) {
+        for (let i = 0; i < 25; i++) {
             await new Promise(r => setTimeout(r, 2000));
             const res = await apiFetch(`/tracks/versions/${jobId}`);
             if (res.status === 'COMPLETED' && res.results?.[0]) {
-                triggerDownload(res.results[0].highQualityUrl || res.results[0].previewUrl);
-                setStatus(`✅ WAV/Stems "${title}" Berhasil Didownload!`, '#00e676');
+                const wavUrl = res.results[0].highQualityUrl || res.results[0].previewUrl;
+                const ext = res.results[0].highQualityUrl ? 'wav' : 'mp3';
+                await forceDownloadFile(wavUrl, `${cleanName} [WAV].${ext}`);
+                setStatus(`✅ WAV/Stems "${cleanName}" Berhasil Didownload!`, '#00e676');
                 return;
             }
             if (res.status === 'FAILED') throw new Error('Gagal generate versi WAV/Stems.');
@@ -275,14 +268,15 @@
         if (!raw) return setStatus('⚠️ Paste Link atau Ketik Judul dulu!', '#ff5252');
 
         resultsEl.innerHTML = '';
-        setStatus(`⏳ Mencari ${type.toUpperCase()}: "${raw}"...`, '#ffea00');
+        setStatus(`⏳ Memproses ${type.toUpperCase()}...`, '#ffea00');
 
         try {
             const extracted = extractId(raw);
             const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(extracted || '');
 
             if (isUuid) {
-                await downloadDirect(extracted, type, extracted);
+                const autoType = raw.includes('/sound-effects/') ? 'sfx' : type;
+                await downloadDirect(extracted, autoType, '');
                 return;
             }
 
@@ -300,7 +294,9 @@
                 const list = data.tracks || [];
                 if (!list.length) return setStatus('❌ Track tidak ditemukan.', '#ff5252');
                 renderResults(list, type);
-                await downloadDirect(list[0].id, type, list[0].title);
+                const firstArtist = list[0].mainArtists?.join(', ') || '';
+                const firstName = firstArtist ? `${list[0].title} - ${firstArtist}` : list[0].title;
+                await downloadDirect(list[0].id, type, firstName);
             }
         } catch (err) {
             setStatus(`❌ ${err.message}`, '#ff5252');
@@ -310,7 +306,8 @@
     function renderResults(items, type) {
         resultsEl.innerHTML = items.map(item => {
             const artist = item.mainArtists ? item.mainArtists.join(', ') : 'SFX';
-            const safeTitle = item.title.replace(/'/g, "\\'");
+            const fullName = item.mainArtists ? `${item.title} - ${artist}` : item.title;
+            const safeTitle = fullName.replace(/'/g, "\\'");
             return `
                 <div class="item">
                     <div class="item-info">

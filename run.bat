@@ -1,3 +1,7 @@
 @echo off
-start http://localhost:8080
-python -m http.server 8080
+for /f "tokens=1,* delims==" %%a in (.env) do (
+    if "%%a"=="EPIDEMIC_API_KEY" (
+        echo window.EPIDEMIC_API_KEY = "%%b"; > env.js
+    )
+)
+start "" "%~dp0index.html"
