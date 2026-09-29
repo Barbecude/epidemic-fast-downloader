@@ -1,0 +1,312 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Epidemic Sound Fast Downloader</title>
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body {
+            font-family: 'Segoe UI', system-ui, sans-serif;
+            background: #0f0f12;
+            color: #fff;
+            min-height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: flex-start;
+            padding: 30px 16px;
+        }
+        .container {
+            background: #18181d;
+            border: 2px solid #2a2a35;
+            padding: 32px;
+            border-radius: 20px;
+            width: 100%;
+            max-width: 680px;
+            box-shadow: 0 15px 40px rgba(0,0,0,0.6);
+        }
+        h1 {
+            font-size: 34px;
+            font-weight: 900;
+            text-align: center;
+            margin-bottom: 20px;
+            letter-spacing: 1px;
+            color: #00e676;
+        }
+        .api-box {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 18px;
+        }
+        .api-box input {
+            flex: 1;
+            padding: 14px 16px;
+            font-size: 16px;
+            font-weight: 800;
+            border-radius: 12px;
+            border: 2px solid #333;
+            background: #22222a;
+            color: #fff;
+            outline: none;
+        }
+        .api-box input:focus, .main-input:focus { border-color: #00e676; }
+        .main-input {
+            width: 100%;
+            padding: 22px;
+            font-size: 24px;
+            font-weight: 900;
+            border: 3px solid #333;
+            border-radius: 14px;
+            background: #22222a;
+            color: #fff;
+            margin-bottom: 18px;
+            outline: none;
+        }
+        .btn-group {
+            display: grid;
+            grid-template-columns: 1fr;
+            gap: 14px;
+        }
+        button {
+            padding: 20px;
+            font-size: 24px;
+            font-weight: 900;
+            color: #fff;
+            border: none;
+            border-radius: 14px;
+            cursor: pointer;
+            text-transform: uppercase;
+            transition: transform 0.1s, opacity 0.2s;
+        }
+        button:hover { opacity: 0.92; transform: translateY(-2px); }
+        button:active { transform: scale(0.98); }
+        .btn-track { background: #00c853; color: #000; }
+        .btn-stems { background: #2979ff; }
+        .btn-sfx { background: #ff9100; color: #000; }
+        .status {
+            margin-top: 20px;
+            font-size: 20px;
+            font-weight: 900;
+            text-align: center;
+            padding: 14px;
+            border-radius: 12px;
+            background: #22222a;
+            color: #aaa;
+        }
+        .results {
+            margin-top: 20px;
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+        }
+        .item {
+            background: #22222a;
+            border: 2px solid #333;
+            padding: 16px;
+            border-radius: 14px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 12px;
+        }
+        .item-info { flex: 1; }
+        .item-title { font-size: 20px; font-weight: 900; color: #fff; }
+        .item-sub { font-size: 15px; font-weight: 700; color: #999; margin-top: 4px; }
+        .dl-btn {
+            padding: 14px 20px;
+            font-size: 18px;
+            font-weight: 900;
+            background: #00e676;
+            color: #000;
+            border-radius: 10px;
+            text-decoration: none;
+            white-space: nowrap;
+        }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <h1>⚡ EPIDEMIC FAST DL</h1>
+
+    <div class="api-box">
+        <input type="password" id="apiKey" placeholder="Paste Epidemic Sound Bearer API Key..." oninput="saveKey()">
+    </div>
+
+    <input type="text" id="queryInput" class="main-input" placeholder="Paste Link / Track ID / Search..." autofocus>
+
+    <div class="btn-group">
+        <button class="btn-track" onclick="handleAction('track')">⬇ DOWNLOAD TRACK (320kbps)</button>
+        <button class="btn-stems" onclick="handleAction('stems')">🎛 DOWNLOAD STEMS / WAV</button>
+        <button class="btn-sfx" onclick="handleAction('sfx')">🔊 DOWNLOAD SFX</button>
+    </div>
+
+    <div class="status" id="status">SIAP DOWNLOAD CEPAT</div>
+    <div class="results" id="results"></div>
+</div>
+
+<script>
+    const API_BASE = 'https://partner-content-api.epidemicsound.com/v0';
+    const keyInput = document.getElementById('apiKey');
+    const queryInput = document.getElementById('queryInput');
+    const statusEl = document.getElementById('status');
+    const resultsEl = document.getElementById('results');
+
+    keyInput.value = localStorage.getItem('es_api_key') || '';
+    function saveKey() { localStorage.setItem('es_api_key', keyInput.value.trim()); }
+
+    queryInput.addEventListener('keydown', e => {
+        if (e.key === 'Enter') handleAction('track');
+    });
+
+    function extractId(input) {
+        const uuidMatch = input.match(/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i);
+        if (uuidMatch) return uuidMatch[0];
+        if (input.includes('epidemicsound.com/')) {
+            const parts = input.split('/').filter(Boolean);
+            return parts[parts.length - 1].replace(/-/g, ' ');
+        }
+        return null;
+    }
+
+    function setStatus(msg, color = '#00e676') {
+        statusEl.style.color = color;
+        statusEl.innerText = msg;
+    }
+
+    async function apiFetch(path, options = {}) {
+        const key = keyInput.value.trim();
+        if (!key) throw new Error('Masukkan API Key Epidemic Sound dulu!');
+        const res = await fetch(`${API_BASE}${path}`, {
+            ...options,
+            headers: {
+                'Accept': 'application/json',
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${key}`,
+                ...(options.headers || {})
+            }
+        });
+        if (!res.ok) {
+            const err = await res.json().catch(() => ({}));
+            throw new Error(err.message || `API Error ${res.status}`);
+        }
+        return res.json();
+    }
+
+    function triggerDownload(url) {
+        const a = document.createElement('a');
+        a.href = url;
+        a.target = '_blank';
+        a.download = '';
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+    }
+
+    async function downloadDirect(id, type, title = 'Audio') {
+        try {
+            setStatus(`⏳ Mengambil link download ${title}...`, '#ffea00');
+            if (type === 'sfx') {
+                const data = await apiFetch(`/sound-effects/${id}/download?format=mp3&quality=high`);
+                triggerDownload(data.url);
+                setStatus(`✅ SFX "${title}" Berhasil Didownload!`, '#00e676');
+            } else if (type === 'stems') {
+                // Request high-quality WAV / Stem version job or instrumental download
+                try {
+                    const job = await apiFetch(`/tracks/versions`, {
+                        method: 'POST',
+                        body: JSON.stringify({ trackId: id, durationMs: 120000 })
+                    });
+                    if (job.jobId) {
+                        setStatus(`🎛 Memproses WAV/Stems (Job ${job.jobId.slice(0,8)})...`, '#2979ff');
+                        await pollVersionJob(job.jobId, title);
+                        return;
+                    }
+                } catch (_) {
+                    // Fallback ke direct high quality download
+                }
+                const data = await apiFetch(`/tracks/${id}/download?format=mp3&quality=high`);
+                triggerDownload(data.url);
+                setStatus(`✅ Stems/Audio "${title}" Berhasil Didownload!`, '#00e676');
+            } else {
+                const data = await apiFetch(`/tracks/${id}/download?format=mp3&quality=high`);
+                triggerDownload(data.url);
+                setStatus(`✅ Track "${title}" Berhasil Didownload!`, '#00e676');
+            }
+            queryInput.value = '';
+            queryInput.focus();
+        } catch (err) {
+            setStatus(`❌ ${err.message}`, '#ff5252');
+        }
+    }
+
+    async function pollVersionJob(jobId, title) {
+        for (let i = 0; i < 20; i++) {
+            await new Promise(r => setTimeout(r, 2000));
+            const res = await apiFetch(`/tracks/versions/${jobId}`);
+            if (res.status === 'COMPLETED' && res.results?.[0]) {
+                triggerDownload(res.results[0].highQualityUrl || res.results[0].previewUrl);
+                setStatus(`✅ WAV/Stems "${title}" Berhasil Didownload!`, '#00e676');
+                return;
+            }
+            if (res.status === 'FAILED') throw new Error('Gagal generate versi WAV/Stems.');
+        }
+        throw new Error('Timeout menunggu proses stems.');
+    }
+
+    async function handleAction(type) {
+        const raw = queryInput.value.trim();
+        if (!raw) return setStatus('⚠️ Paste Link atau Ketik Judul dulu!', '#ff5252');
+
+        resultsEl.innerHTML = '';
+        setStatus(`⏳ Mencari ${type.toUpperCase()}: "${raw}"...`, '#ffea00');
+
+        try {
+            const extracted = extractId(raw);
+            const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(extracted || '');
+
+            if (isUuid) {
+                await downloadDirect(extracted, type, extracted);
+                return;
+            }
+
+            const searchTerm = encodeURIComponent(extracted || raw);
+
+            if (type === 'sfx') {
+                const data = await apiFetch(`/sound-effects/search?term=${searchTerm}&limit=5&sort=best-match&order=desc`);
+                const list = data.soundEffects || [];
+                if (!list.length) return setStatus('❌ SFX tidak ditemukan.', '#ff5252');
+                renderResults(list, 'sfx');
+                await downloadDirect(list[0].id, 'sfx', list[0].title);
+            } else {
+                const vocalFilter = type === 'stems' ? '&vocalType=NONE' : '';
+                const data = await apiFetch(`/tracks/search?term=${searchTerm}&limit=5&sort=Relevance&order=desc${vocalFilter}`);
+                const list = data.tracks || [];
+                if (!list.length) return setStatus('❌ Track tidak ditemukan.', '#ff5252');
+                renderResults(list, type);
+                await downloadDirect(list[0].id, type, list[0].title);
+            }
+        } catch (err) {
+            setStatus(`❌ ${err.message}`, '#ff5252');
+        }
+    }
+
+    function renderResults(items, type) {
+        resultsEl.innerHTML = items.map(item => {
+            const artist = item.mainArtists ? item.mainArtists.join(', ') : 'SFX';
+            const safeTitle = item.title.replace(/'/g, "\\'");
+            return `
+                <div class="item">
+                    <div class="item-info">
+                        <div class="item-title">${item.title}</div>
+                        <div class="item-sub">${artist} • ${item.length || 0}s ${item.bpm ? '• ' + item.bpm + ' BPM' : ''}</div>
+                    </div>
+                    <button class="dl-btn" onclick="downloadDirect('${item.id}', '${type}', '${safeTitle}')">⬇ UNDUH</button>
+                </div>
+            `;
+        }).join('');
+    }
+</script>
+
+</body>
+</html>
